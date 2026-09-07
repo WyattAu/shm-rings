@@ -1,13 +1,20 @@
 //! Lock-free SPMC ring buffer backed by a shared-memory-mapped file.
 //!
-//! `shm-rings` provides one thing: [`SpmcRingBuffer`] — a fixed-capacity,
-//! power-of-two masked, cache-line-aligned ring over a file via `mmap`. A
-//! single producer publishes `Copy` messages with `try_push(&mut self)`; up
-//! to [`MAX_READERS`] independent consumers walk the stream concurrently
-//! with `try_pop(&self)`, in the same process or across processes mapping
-//! the same file. Flow control is backpressure-only: the producer stops
-//! when the slowest reader lags by a full capacity. No overwrite mode, no
-//! journal, no mirrors — just the ring.
+//! `shm-rings` provides two shared-memory primitives over `mmap`-backed
+//! files:
+//!
+//! - [`SpmcRingBuffer`] — a fixed-capacity, power-of-two masked,
+//!   cache-line-aligned ring for streaming messages: a single producer
+//!   publishes `Copy` messages with `try_push(&mut self)`; up to
+//!   [`MAX_READERS`] independent consumers walk the stream concurrently
+//!   with `try_pop(&self)`, in the same process or across processes mapping
+//!   the same file. Flow control is backpressure-only: the producer stops
+//!   when the slowest reader lags by a full capacity. No overwrite mode, no
+//!   journal, no mirrors — just the ring.
+//! - [`status`] — the state counterpart: a generic validated file-backed
+//!   POD status (`create`/`read`/`update`/`cleanup` around a
+//!   [`status::PodStatus`] impl), for publishing counters, flags, and
+//!   heartbeats rather than streaming events.
 //!
 //! # Quickstart
 //!
@@ -123,6 +130,7 @@ pub mod header;
 #[cfg(feature = "loom")]
 pub mod loom_ring;
 pub mod ring;
+pub mod status;
 
 pub use error::ShmRingError;
 pub use header::{RingHeader, HEADER_SIZE, MAGIC, MAX_READERS, VERSION};
