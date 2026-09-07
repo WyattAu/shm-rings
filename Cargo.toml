@@ -1,0 +1,42 @@
+[package]
+name = "shm-rings"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Lock-free SPMC shared-memory ring buffer: power-of-two masked indices, 256-byte cache-aligned versioned header, backpressure-only, zero SeqCst"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/WyattAu/shm-rings"
+readme = "README.md"
+keywords = ["shm", "ring-buffer", "spmc", "lock-free", "ipc"]
+categories = ["concurrency", "memory-management"]
+exclude = ["fuzz"]
+
+[dependencies]
+memmap2 = "0.9"
+zerocopy = { version = "0.8", features = ["derive"] }
+thiserror = "2"
+loom = { version = "0.7", features = ["futures"], optional = true }
+
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1"
+tempfile = "3"
+
+[features]
+default = ["std"]
+std = []
+loom = ["dep:loom"]
+
+[[test]]
+name = "integration"
+
+[[test]]
+name = "proptest"
+
+[[test]]
+name = "loom"
+required-features = ["loom"]
+
+[[bench]]
+name = "ring_bench"
+harness = false

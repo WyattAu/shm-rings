@@ -1,0 +1,29 @@
+[package]
+name = "shm-rings-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+shm-rings = { path = ".." }
+tempfile = "3"
+
+[[bin]]
+name = "fuzz_ring"
+path = "fuzz_targets/fuzz_ring.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_open"
+path = "fuzz_targets/fuzz_open.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
