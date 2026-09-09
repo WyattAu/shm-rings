@@ -9,7 +9,7 @@ repository = "https://github.com/WyattAu/shm-rings"
 readme = "README.md"
 keywords = ["shm", "ring-buffer", "spmc", "lock-free", "ipc"]
 categories = ["concurrency", "memory-management"]
-exclude = ["fuzz"]
+exclude = ["/target", "fuzz"]
 
 [dependencies]
 memmap2 = "0.9"
@@ -40,3 +40,7 @@ required-features = ["loom"]
 [[bench]]
 name = "ring_bench"
 harness = false
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
