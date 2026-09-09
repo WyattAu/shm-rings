@@ -1,4 +1,6 @@
 //! Model-based property test: a `VecDeque` oracle drives an arbitrary
+// Test/bench code: unwrap/expect are the idiomatic way to assert outcomes.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! operation sequence and checks the ring's invariants after every step.
 
 use proptest::prelude::*;

@@ -1,4 +1,6 @@
 //! Integration tests for [`shm_rings::status`].
+// Test/bench code: unwrap/expect are the idiomatic way to assert outcomes.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //!
 //! Ports the suture-daemon `shm.rs` test patterns (round-trip, magic
 //! reject, update, cleanup) and extends them: version reject (the gate
@@ -10,8 +12,8 @@
 
 use std::path::PathBuf;
 
-use shm_rings::ShmRingError;
 use shm_rings::status::{self, PodStatus};
+use shm_rings::ShmRingError;
 
 /// Status type A: scalar fields.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -229,7 +231,10 @@ fn read_rejects_short_file() {
     std::fs::write(&path, &raw).expect("write raw");
 
     let err = status::read::<StatusA>(&path).expect_err("must reject");
-    assert!(matches!(err, ShmRingError::FileTooShort { .. }), "got {err:?}");
+    assert!(
+        matches!(err, ShmRingError::FileTooShort { .. }),
+        "got {err:?}"
+    );
 
     status::cleanup(&path).expect("cleanup");
 }
@@ -276,32 +281,38 @@ fn update_rejects_foreign_file() {
     // identity gates are what reject — for both magic and version.
     let path_a = fresh_path("upd-foreign-magic");
     status::create(&path_a, &status_a(1, 1)).expect("create");
-    let err = status::update(&path_a, &StatusC {
-        magic: StatusC::MAGIC,
-        version: StatusC::VERSION,
-        repo_count: 1,
-        total: 1,
-    })
+    let err = status::update(
+        &path_a,
+        &StatusC {
+            magic: StatusC::MAGIC,
+            version: StatusC::VERSION,
+            repo_count: 1,
+            total: 1,
+        },
+    )
     .expect_err("must reject");
     assert!(
-        matches!(
-            err,
-            ShmRingError::HeaderCorruption { field: "magic", .. }
-        ),
+        matches!(err, ShmRingError::HeaderCorruption { field: "magic", .. }),
         "got {err:?}"
     );
     status::cleanup(&path_a).expect("cleanup");
 
     let path_av2 = fresh_path("upd-foreign-version");
     status::create(&path_av2, &status_a(1, 1)).expect("create");
-    let err = status::update(&path_av2, &StatusAV2 {
-        magic: StatusAV2::MAGIC,
-        version: StatusAV2::VERSION,
-        repo_count: 1,
-        total: 1,
-    })
+    let err = status::update(
+        &path_av2,
+        &StatusAV2 {
+            magic: StatusAV2::MAGIC,
+            version: StatusAV2::VERSION,
+            repo_count: 1,
+            total: 1,
+        },
+    )
     .expect_err("must reject");
-    assert!(matches!(err, ShmRingError::VersionMismatch { .. }), "got {err:?}");
+    assert!(
+        matches!(err, ShmRingError::VersionMismatch { .. }),
+        "got {err:?}"
+    );
     status::cleanup(&path_av2).expect("cleanup");
 }
 

@@ -153,9 +153,8 @@ pub fn create<T: PodStatus>(path: &Path, initial: &T) -> Result<(), ShmRingError
     // hazards). We reinterpret it as a byte slice of exactly `size_of::<T>()`
     // bytes; the pointer derives from a live reference, so it is aligned
     // and valid for that length.
-    let bytes = unsafe {
-        std::slice::from_raw_parts(std::ptr::from_ref::<T>(initial).cast::<u8>(), size)
-    };
+    let bytes =
+        unsafe { std::slice::from_raw_parts(std::ptr::from_ref::<T>(initial).cast::<u8>(), size) };
     mmap.copy_from_slice(bytes);
     mmap.flush()?;
     Ok(())
@@ -262,7 +261,8 @@ pub fn update<T: PodStatus>(path: &Path, value: &T) -> Result<(), ShmRingError> 
     // SAFETY: `value` is a valid `T` reference; the byte slice length is
     // exactly `size_of::<T>()`, matching the verified mapping length, and
     // the pointer derives from a live reference (aligned, valid).
-    let bytes = unsafe { std::slice::from_raw_parts(std::ptr::from_ref::<T>(value).cast::<u8>(), size) };
+    let bytes =
+        unsafe { std::slice::from_raw_parts(std::ptr::from_ref::<T>(value).cast::<u8>(), size) };
     mmap.copy_from_slice(bytes);
     mmap.flush()?;
     Ok(())

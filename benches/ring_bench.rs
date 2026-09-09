@@ -1,4 +1,6 @@
 //! Criterion benchmarks for the ring's hot paths.
+// Test/bench code: unwrap/expect are the idiomatic way to assert outcomes.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //!
 //! Documented target: **< 100 ns per successful push** on a modern x86-64
 //! core. `try_push` is: one Relaxed load, an N-wide Acquire min-scan, one

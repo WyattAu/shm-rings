@@ -128,6 +128,9 @@
 pub mod error;
 pub mod header;
 #[cfg(feature = "loom")]
+// Loom model-check harnesses: `join().unwrap()` is the idiomatic way to
+// propagate panics from model threads.
+#[allow(clippy::unwrap_used)]
 pub mod loom_ring;
 pub mod ring;
 pub mod status;

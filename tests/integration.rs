@@ -1,4 +1,6 @@
 //! End-to-end integration tests against real mmap-backed rings.
+// Test/bench code: unwrap/expect are the idiomatic way to assert outcomes.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
