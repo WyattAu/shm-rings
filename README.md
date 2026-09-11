@@ -1,5 +1,9 @@
 # shm-rings
 
+[![docs.rs](https://docs.rs/shm-rings/badge.svg)](https://docs.rs/shm-rings)
+[![crates.io](https://img.shields.io/crates/v/shm-rings.svg)](https://crates.io/crates/shm-rings)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+
 Lock-free **SPMC** ring buffer over **shared memory**. One producer publishes
 `Copy` messages; up to 8 independent consumers walk the stream concurrently —
 same process or across processes mapping the same file. Backpressure-only:
