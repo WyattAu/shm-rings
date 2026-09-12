@@ -1,6 +1,6 @@
 [package]
 name = "shm-rings"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.85"
 description = "Lock-free SPMC shared-memory ring buffer: power-of-two masked indices, 256-byte cache-aligned versioned header, backpressure-only, zero SeqCst"
@@ -20,6 +20,7 @@ libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
+iai-callgrind = "0.16"
 proptest = "1"
 tempfile = "3"
 
@@ -59,6 +60,12 @@ harness = false
 name = "notify_bench"
 harness = false
 required-features = ["notify"]
+
+# Deterministic CI perf gate (instruction counts under valgrind). Not run
+# locally unless valgrind is installed; see benches/iai_ring.rs.
+[[bench]]
+name = "iai_ring"
+harness = false
 
 [lints.clippy]
 unwrap_used = "warn"

@@ -25,7 +25,7 @@
 //!   `abort` (release without consuming), or drop (commit-at-cursor). The
 //!   iceoryx2-style middle ground: no serialization, no copy, no new ABI
 //!   beyond fixed-layout records.
-//! - [`notify`] *(feature `notify`, Linux)* — eventfd-backed blocking
+//! - `notify` *(feature `notify`, Linux)* — eventfd-backed blocking
 //!   consume: producers `push_notified` (publish-then-signal), consumers
 //!   `pop_blocking` (check-then-park). No busy-wait, no lost wakeups.
 //!
@@ -152,7 +152,7 @@
 //!     `notify`, Linux) — raw libc calls on an owned descriptor with kernel
 //!     side synchronization; no aliasing or lifetime implications.
 //!
-//! The loom double ([`loom_ring`], `--features loom`) re-runs the identical
+//! The loom double (`loom_ring`, `--features loom`) re-runs the identical
 //! ordering protocol with zero `unsafe`, so the *interleaving logic* is
 //! exhaustively model-checked while the *mmap mechanics* are covered by
 //! integration tests, property tests, and fuzzing.

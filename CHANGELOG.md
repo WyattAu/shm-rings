@@ -5,6 +5,28 @@ Changelog](https://keepachangelog.com/) — versions follow [semver](https://sem
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-12
+
+### Added
+
+- Perf-claims proof-back pass: `CLAIMS.md` maps every numeric/behavioral
+  perf claim in the README to its proof artifact (15 backed, 1 newly
+  proven, 1 reworded as historical).
+- `benches/iai_ring.rs`: iai-callgrind instruction-count regression gate
+  for the hot paths — `push_single`, `push_batch_4096` (the shape behind
+  the ~18.5 ns/push number), `pop_single`, and `loan_claim_commit`.
+  CI-only execution (needs valgrind); compiles everywhere.
+- `tests/zero_alloc_ring_ops.rs`: counting-global-allocator proof that
+  steady-state `try_push` / `try_pop` / `claim` / `commit` — and the
+  backpressure rejection path — perform zero heap allocations, as the
+  mmap design implies.
+
+### Changed
+
+- README: benchmark section links `CLAIMS.md` and documents the
+  iai-callgrind gate and zero-alloc test; the "byte-identical to 0.1.1"
+  release note is now marked historical. No API changes.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

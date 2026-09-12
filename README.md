@@ -218,7 +218,16 @@ format.
 
 ## Benchmarks
 
-Measured (criterion, `cargo bench`, this repo's CI runner, x86-64):
+Measured (criterion, `cargo bench`, this repo's CI runner, x86-64).
+Wall-clock numbers are indicative; the deterministic regression gate is
+`benches/iai_ring.rs`
+([iai-callgrind](https://github.com/iai-callgrind/iai-callgrind)) — it
+counts CPU instructions for `try_push` (single op + 4096 batch), `try_pop`,
+and `claim`/`commit`, so a hot-path regression fails CI even when a noisy
+runner hides it in the wall clock. Steady-state ring operations are proven
+allocation-free by `tests/zero_alloc_ring_ops.rs` (counting global
+allocator). Every numeric claim in this README is mapped to its proof
+artifact in [CLAIMS.md](CLAIMS.md).
 
 | bench                          | shape                                        | result |
 |--------------------------------|----------------------------------------------|--------|
@@ -238,9 +247,11 @@ Reading the v0.2 rows:
   loan path is ~2× faster end-to-end (the push is shared, so the consume
   delta is larger still). At 8 bytes the copy is cheaper than the loan's
   extra atomic bookkeeping — use `try_pop` for small records, `claim` for
-  large ones. The `try_push` path is byte-identical to 0.1.1; the push
-  target (~18.5 ns) is unaffected. (`try_pop` gains one `Relaxed` load of
-  the per-reader loan gate.)
+  large ones. At release time (0.2.0) the `try_push` path was
+  byte-identical to 0.1.1 and the push target (~18.5 ns) was unaffected;
+  the iai instruction gate now pins the push path's shape so any future
+  deviation shows up in CI. (`try_pop` gains one `Relaxed` load of the
+  per-reader loan gate.)
 - **Notification trades latency for CPU.** On an idle 2-thread ping-pong,
   spinning wins on round-trip latency (no syscall); blocking costs one
   `write` + one `poll`/`read` per handoff but uses roughly 3–6× less CPU —

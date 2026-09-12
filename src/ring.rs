@@ -86,7 +86,7 @@
 //! counter blocks `try_pop` for a reader with open loans, so the cursor
 //! cannot sneak past a live loan from the same handle.
 //!
-//! # Orderings added in v0.2 — notification handshake ([`crate::notify`])
+//! # Orderings added in v0.2 — notification handshake (`crate::notify`)
 //!
 //! The eventfd wakeup is a third message-passing edge chained *after* the
 //! publish edge:
