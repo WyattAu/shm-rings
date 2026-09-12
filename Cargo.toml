@@ -1,6 +1,6 @@
 [package]
 name = "shm-rings"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Lock-free SPMC shared-memory ring buffer: power-of-two masked indices, 256-byte cache-aligned versioned header, backpressure-only, zero SeqCst"
@@ -16,6 +16,7 @@ memmap2 = "0.9"
 zerocopy = { version = "0.8", features = ["derive"] }
 thiserror = "2"
 loom = { version = "0.7", features = ["futures"], optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
@@ -26,6 +27,8 @@ tempfile = "3"
 default = ["std"]
 std = []
 loom = ["dep:loom"]
+# Linux eventfd-based wakeup for blocking consumers (`notify` module).
+notify = ["dep:libc"]
 
 [[test]]
 name = "integration"
@@ -37,9 +40,25 @@ name = "proptest"
 name = "loom"
 required-features = ["loom"]
 
+[[test]]
+name = "loan"
+
+[[test]]
+name = "notify"
+required-features = ["notify"]
+
 [[bench]]
 name = "ring_bench"
 harness = false
+
+[[bench]]
+name = "loan_bench"
+harness = false
+
+[[bench]]
+name = "notify_bench"
+harness = false
+required-features = ["notify"]
 
 [lints.clippy]
 unwrap_used = "warn"

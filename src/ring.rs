@@ -64,6 +64,52 @@
 //! read its own last store, which program order already guarantees), and
 //! `total_written` is a monotonically growing diagnostic.
 //!
+//! # Orderings added in v0.2 — zero-copy loans ([`crate::loan`])
+//!
+//! A loan reuses the *observe* protocol unchanged and defers the reclaim
+//! edge:
+//!
+//! ```text
+//! 3'. claim:   read write_idx   (Acquire)   -- publish edge, same as (3)
+//!              read cursor      (Acquire)
+//! 4'. hold:    deref loan       (volatile-free read through &T)
+//! 5'. commit:  cursor = idx + 1 (Release)   -- reclaim edge, same as (5)
+//! ```
+//!
+//! The loan's safety rests on the same core invariant as `try_pop`: the
+//! producer can overwrite slot `i` only when *every* reader cursor is past
+//! `i`. While a loan at index `i` is open, the reader's cursor stays ≤ `i`
+//! (commits are strictly FIFO through an `index == cursor` check), so the
+//! slot is pinned and the `&T` handed out dereferences race-free. `commit`
+//! performs exactly step 5'; `abort` rewinds the handle-local claim
+//! pipeline without touching the shared cursor; the per-handle loan-depth
+//! counter blocks `try_pop` for a reader with open loans, so the cursor
+//! cannot sneak past a live loan from the same handle.
+//!
+//! # Orderings added in v0.2 — notification handshake ([`crate::notify`])
+//!
+//! The eventfd wakeup is a third message-passing edge chained *after* the
+//! publish edge:
+//!
+//! ```text
+//! producer: 1. write slot bytes  2. write_idx += 1 (Release)  3. write(eventfd)
+//! consumer: a. read write_idx    (Acquire)  → empty?
+//!           b. read(eventfd)     — blocks if the producer has not yet run (3)
+//!           c. goto observe protocol (3–5 above)
+//! ```
+//!
+//! Correctness requires signal-*after*-publish ((2) before (3), program
+//! order on the producer) and check-*before*-wait ((a) before (b), program
+//! order on the consumer). There is no lost-wakeup window: eventfd is an
+//! accumulating counter, not a compare-value, so a signal that lands
+//! between (a) and (b) is consumed by (b) instead of being missed. When the
+//! consumer wakes from (b), the kernel's read/write ordering gives
+//! happens-before from the producer's (3) — and hence transitively from the
+//! Release store in (2) — to everything the consumer does after (c), so the
+//! post-wakeup `Acquire` load of `write_idx` observes the new message. The
+//! loom model `model_notify_no_lost_wakeup` proves the user-space shape of
+//! this handshake (publish → bump, observe-bump → see-message) exhaustively.
+//!
 //! # Single-producer contract
 //!
 //! Exactly one thread (in one process) may push at a time. This is enforced
@@ -86,7 +132,10 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::mem::{align_of, size_of};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering::{Acquire, Relaxed, Release};
+use std::sync::atomic::{
+    AtomicU64,
+    Ordering::{Acquire, Relaxed, Release},
+};
 
 use memmap2::MmapMut;
 use zerocopy::{FromBytes, Immutable};
@@ -148,6 +197,21 @@ pub struct SpmcRingBuffer<T: Copy + FromBytes + Immutable> {
     capacity: usize,
     /// Path the ring was created from or opened at.
     path: PathBuf,
+    /// Per-reader claim pipelines for zero-copy loans (see [`crate::loan`]).
+    ///
+    /// `claim_base[r]` is the next stream index this *handle* will hand out
+    /// to a claim on reader `r`. It is handle-local bookkeeping (never
+    /// touches the file format): the shared cursor remains the single source
+    /// of truth for what has been consumed. Whenever `claim_base[r]` falls
+    /// behind the shared cursor (external pops, pipeline rewind), the next
+    /// claim realigns it with `max(claim_base, cursor)`.
+    pub(crate) claim_base: [AtomicU64; MAX_READERS],
+    /// Per-reader count of outstanding loans issued by this handle.
+    ///
+    /// Non-zero blocks `try_pop` for that reader with
+    /// [`ShmRingError::LoanOutstanding`]: popping past an open loan would
+    /// un-pin the loaned slot and void the loan's safety guarantee.
+    pub(crate) loan_depth: [AtomicU64; MAX_READERS],
     /// Pins the `T` parameter (the mapping is untyped bytes).
     _marker: PhantomData<T>,
 }
@@ -219,6 +283,10 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
             align_of::<T>() <= 64,
             "align_of::<T>() must be <= 64 (the header/slot alignment guarantee)"
         );
+        assert!(
+            size_of::<T>() > 0,
+            "zero-sized record types are not supported: every slot must occupy bytes in the mapping"
+        );
         let path = path.as_ref().to_path_buf();
         if path.exists() {
             return Err(ShmRingError::AlreadyExists);
@@ -258,6 +326,8 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
             header,
             capacity,
             path,
+            claim_base: std::array::from_fn(|_| AtomicU64::new(0)),
+            loan_depth: std::array::from_fn(|_| AtomicU64::new(0)),
             _marker: PhantomData,
         })
     }
@@ -281,6 +351,10 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
         assert!(
             align_of::<T>() <= 64,
             "align_of::<T>() must be <= 64 (the header/slot alignment guarantee)"
+        );
+        assert!(
+            size_of::<T>() > 0,
+            "zero-sized record types are not supported: every slot must occupy bytes in the mapping"
         );
         let path = path.as_ref().to_path_buf();
         let file = std::fs::OpenOptions::new()
@@ -328,12 +402,14 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
             header: header.cast_mut(),
             capacity,
             path,
+            claim_base: std::array::from_fn(|_| AtomicU64::new(0)),
+            loan_depth: std::array::from_fn(|_| AtomicU64::new(0)),
             _marker: PhantomData,
         })
     }
 
     /// Shared view of the header.
-    fn hdr(&self) -> &RingHeader {
+    pub(crate) fn hdr(&self) -> &RingHeader {
         // SAFETY: `self.header` points at the base of `self.mmap`, which is
         // alive and mapped for `'_` of the returned reference; the header
         // region is fully initialized (constructor) and contains only
@@ -343,7 +419,7 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
     }
 
     /// Pointer to slot `idx` (unmasked `u64` index; masked here).
-    fn slot_ptr(&self, idx: u64) -> *mut T {
+    pub(crate) fn slot_ptr(&self, idx: u64) -> *mut T {
         let slot = (idx & (self.capacity as u64 - 1)) as usize;
         let offset = DATA_OFFSET + slot * size_of::<T>();
         // SAFETY: `self.mmap.as_ptr()` is the mapping base; the mapping is
@@ -403,6 +479,12 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
     /// `Release` store of the reader's own cursor (see the module docs).
     pub fn try_pop(&self, reader_id: usize) -> Result<Option<T>, ShmRingError> {
         self.check_reader(reader_id)?;
+        // Loan guard: popping while a zero-copy loan is open would advance
+        // the cursor over (or past) the loaned slot and un-pin it. See the
+        // `loan` module for the exact validity contract.
+        if self.loan_depth[reader_id].load(Relaxed) != 0 {
+            return Err(ShmRingError::LoanOutstanding { reader_id });
+        }
         let hdr = self.hdr();
         // Acquire: synchronizes with the producer's Release publish; the
         // slot bytes for every index < the loaded value are visible below.
@@ -501,7 +583,7 @@ impl<T: Copy + FromBytes + Immutable> SpmcRingBuffer<T> {
         &self.path
     }
 
-    fn check_reader(&self, reader_id: usize) -> Result<(), ShmRingError> {
+    pub(crate) fn check_reader(&self, reader_id: usize) -> Result<(), ShmRingError> {
         let num_readers = self.hdr().num_readers(Acquire);
         if reader_id >= num_readers {
             return Err(ShmRingError::InvalidReaderId {

@@ -21,6 +21,8 @@ block for cross-process diagnostics.
 | REQ-SR-006 | The `status` module persists a POD status block: `read`/`write` round-trip any `PodStatus` value, `update` mutates in place, foreign files are rejected | SHOULD |
 | REQ-SR-007 | `cleanup` removes the ring file and is idempotent | SHOULD |
 | REQ-SR-008 | `capacity`, `len`, `is_empty`, `reader_count`, `slowest_lag`, and `total_written` report consistent diagnostics while the ring is in use | SHOULD |
+| REQ-SR-009 | `claim` returns a zero-copy `Loan` viewing the next published record in place; `commit` advances the cursor FIFO (rejecting out-of-order commits), `abort` releases without consuming, drop commits at cursor; an open loan pins its slot against producer overwrite and gates `try_pop` with a typed error | MUST |
+| REQ-SR-010 | With feature `notify`, `push_notified` signals only after a successful publish and `pop_blocking` re-checks after every wakeup; a consumer parked on an empty ring wakes for the next message (no lost wakeup) within any deadline | MUST |
 
 ## Security
 
@@ -53,6 +55,8 @@ block for cross-process diagnostics.
 | REQ-SR-006 | `round_trip_status_a`, `round_trip_status_b`, `update_persists_mutation`, `update_rejects_foreign_file`, `set_magic_stamps_fresh_value` (`src/status.rs` tests) | unit |
 | REQ-SR-007 | `cleanup_removes_and_is_idempotent` | unit |
 | REQ-SR-008 | `diagnostics_track_state` | unit |
+| REQ-SR-009 | `loan_commit_matches_try_pop_values`, `loan_drop_commits_by_default`, `loan_abort_rewinds_and_message_is_reclaimable`, `loan_abort_rewinds_pipeline_later_loans_recover`, `out_of_order_commit_rejected_then_fifo_succeeds`, `commit_is_idempotent_and_drop_after_commit_is_noop`, `overlapping_loans_up_to_capacity`, `try_pop_rejected_while_loan_outstanding`, `loan_pins_producer_at_capacity`, `failed_claim_releases_the_gate`, `claim_realigns_after_external_cursor_advance`, `loans_are_send_and_resolvable_on_another_thread`, `concurrent_claims_commits_with_producer`, `abort_during_active_producer_keeps_stream_consistent` (`tests/loan.rs`); `loom_loan_pins_cursor_against_producer_and_rejects_out_of_order_commit` (`tests/loom.rs`) | unit/loom |
+| REQ-SR-010 | `pop_blocking_wakes_on_signal`, `pop_blocking_timeout_returns_none_when_no_message`, `no_lost_wakeup_stress`, `pingpong_handoff_round_trips`, `push_notified_reports_backpressure_without_signaling`, `eventfd_counter_accumulates_and_drains`, `eventfd_wait_timeout_returns_none_when_idle` (`tests/notify.rs`); `loom_notify_handshake_woken_consumer_always_sees_the_message` (`tests/loom.rs`) | unit/loom |
 | REQ-SR-100 | `header_corruption_magic_detected`, `version_mismatch_detected` | unit |
 | REQ-SR-101 | `non_power_of_two_capacity_rejected`, `zero_capacity_rejected`; fuzz targets `fuzz_open.rs`, `fuzz_ring.rs` | unit/fuzz |
 | REQ-SR-102 | `loom_backpressure_boundary_never_crossed_without_reader_advance`, `loom_fanout_two_readers_no_overwrite_before_slowest_read`, `model_based_ops_match_vecdeque_oracle` (`tests/loom.rs`, `tests/proptest.rs`) | loom/property |
@@ -65,6 +69,9 @@ block for cross-process diagnostics.
 
 ## Test Count
 
-- 29 `#[test]` functions across unit, integration, proptest, and loom suites.
+- 54 `#[test]` functions across unit, integration, loan, notify, proptest,
+  and loom suites (50 with default features + `notify`; 4 loom models),
+  plus 4 doc tests.
 - All-features suite (including loom model checking) passes with 0 failures;
-  no-default-features suite passes.
+  no-default-features suite passes; clippy `-D warnings` clean on
+  all-features and no-default-features; `cargo doc` 0 warnings.

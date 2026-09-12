@@ -16,6 +16,19 @@
 //!   [`status::PodStatus`] impl), for publishing counters, flags, and
 //!   heartbeats rather than streaming events.
 //!
+//! Two v0.2 additions round out the message path (both optional at the
+//! call site, neither changes the on-disk format):
+//!
+//! - [`loan`] — zero-copy consumption: [`SpmcRingBuffer::claim`] reserves
+//!   the next message and hands out a [`loan::Loan`] — a `Deref`-able view
+//!   into the mapped slot — resolved by `commit` (advance cursor),
+//!   `abort` (release without consuming), or drop (commit-at-cursor). The
+//!   iceoryx2-style middle ground: no serialization, no copy, no new ABI
+//!   beyond fixed-layout records.
+//! - [`notify`] *(feature `notify`, Linux)* — eventfd-backed blocking
+//!   consume: producers `push_notified` (publish-then-signal), consumers
+//!   `pop_blocking` (check-then-park). No busy-wait, no lost wakeups.
+//!
 //! # Quickstart
 //!
 //! ```no_run
@@ -30,6 +43,12 @@
 //! let reader = SpmcRingBuffer::<u64>::open_existing("/dev/shm/demo.ring")?;
 //! if let Some(v) = reader.try_pop(0)? {
 //!     assert_eq!(v, 42);
+//! }
+//!
+//! // Zero-copy variant of the consume path:
+//! if let Some(mut loan) = reader.claim(0)? {
+//!     assert_eq!(*loan, 42);   // read in place, nothing copied
+//!     loan.commit()?;          // publish the cursor advance
 //! }
 //! # Ok(())
 //! # }
@@ -104,11 +123,34 @@
 //!    one, still un-advanced — to be past the slot), so no concurrent write
 //!    exists; `T: Immutable` rules out interior mutability, so the read
 //!    cannot race with writes into a `Cell` reachable via `&T`.
-//! 7. **`unsafe impl Send`** — mapping ownership + all shared state atomic;
-//!    no non-atomic shared mutable state.
-//! 8. **`unsafe impl Sync`** — all `&self` access is atomics, ordered
-//!    volatile payload access, or immutable fields; `T: Immutable` closes
-//!    the interior-mutability hole.
+//! 7. **`claim` (loans): slot pointer stored in `Loan`** (`loan.rs`) —
+//!    `self.slot_ptr(idx).cast_const()`, no dereference at claim time.
+//!    *Invariant:* identical to (6) — `idx ≥ cursor` at claim (realign
+//!    ensures it) and the per-handle loan gate keeps `try_pop` from
+//!    advancing the cursor, so the slot stays pinned for the loan's whole
+//!    lifetime; the pointer is never dereferenced until the invariants
+//!    hold.
+//! 8. **`Loan::deref` / `Loan::as_bytes`: `&*ptr` / byte slice** — the
+//!    zero-copy read itself.
+//!    *Invariant:* in-bounds/aligned per (4); `T: FromBytes` makes any bit
+//!    pattern in the pinned slot a valid `T`; `T: Immutable` closes the
+//!    interior-mutability hole; and the cursor pinning argument of (7)
+//!    guarantees no concurrent write, so a shared reference is race-free.
+//!    Cross-handle misuse (advancing a reader's cursor past a live loan
+//!    from another handle) voids the pinning and is documented undefined
+//!    behavior — the same trust boundary as the single-producer contract
+//!    and the `peek` validity window.
+//! 9. **`unsafe impl Send`/`Sync` for `Loan`** — all shared access is
+//!    atomics or pinned mapped bytes of an `Immutable` type; see the impls
+//!    in `loan.rs`.
+//! 10. **`unsafe impl Send`** for the ring — mapping ownership + all shared state atomic;
+//!     no non-atomic shared mutable state.
+//! 11. **`unsafe impl Sync`** for the ring — all `&self` access is atomics, ordered
+//!     volatile payload access, or immutable fields; `T: Immutable` closes
+//!     the interior-mutability hole.
+//! 12. **`notify`: `eventfd`/`read`/`write`/`poll` syscalls** (feature
+//!     `notify`, Linux) — raw libc calls on an owned descriptor with kernel
+//!     side synchronization; no aliasing or lifetime implications.
 //!
 //! The loom double ([`loom_ring`], `--features loom`) re-runs the identical
 //! ordering protocol with zero `unsafe`, so the *interleaving logic* is
@@ -127,14 +169,18 @@
 
 pub mod error;
 pub mod header;
+pub mod loan;
 #[cfg(feature = "loom")]
 // Loom model-check harnesses: `join().unwrap()` is the idiomatic way to
 // propagate panics from model threads.
 #[allow(clippy::unwrap_used)]
 pub mod loom_ring;
+#[cfg(all(feature = "notify", target_os = "linux"))]
+pub mod notify;
 pub mod ring;
 pub mod status;
 
 pub use error::ShmRingError;
 pub use header::{RingHeader, HEADER_SIZE, MAGIC, MAX_READERS, VERSION};
+pub use loan::Loan;
 pub use ring::SpmcRingBuffer;

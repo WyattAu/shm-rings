@@ -73,4 +73,34 @@ pub enum ShmRingError {
         /// Highest valid reader id (`MAX_READERS - 1`).
         max: usize,
     },
+
+    /// [`crate::SpmcRingBuffer::try_pop`] was called for a reader that has
+    /// at least one outstanding [`crate::loan::Loan`].
+    ///
+    /// Popping past an open loan would advance the reader's cursor over the
+    /// loaned slot and un-pin it, voiding the loan's zero-copy guarantee.
+    /// Resolve (commit or abort) the outstanding loan first.
+    #[error("reader {reader_id} has an outstanding loan; commit or abort it before popping")]
+    LoanOutstanding {
+        /// The reader id with the open loan.
+        reader_id: usize,
+    },
+
+    /// [`crate::loan::Loan::commit`] was called on a loan whose index is not
+    /// the reader's current cursor. Commits are strictly FIFO: every earlier
+    /// loan for this reader must be committed (or the pipeline rewound via
+    /// [`crate::loan::Loan::abort`]) before this one may advance the cursor.
+    ///
+    /// This is a sequencing error, not a safety error: nothing was written,
+    /// and the loan (still alive) continues to pin its slot.
+    #[error(
+        "loan at index {index} cannot commit: reader cursor is at {cursor} \
+         (commit earlier loans first, or abort to rewind the claim pipeline)"
+    )]
+    LoanNotAtCursor {
+        /// The stream index this loan views.
+        index: u64,
+        /// The reader's current (committed) cursor position.
+        cursor: u64,
+    },
 }
