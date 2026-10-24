@@ -1,9 +1,9 @@
 [package]
 name = "shm-rings"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2021"
 rust-version = "1.85"
-description = "Lock-free SPMC shared-memory ring buffer: power-of-two masked indices, 256-byte cache-aligned versioned header, backpressure-only, zero SeqCst"
+description = "Lock-free shared-memory SPMC ring: power-of-two masked, cache-line aligned, zero SeqCst, loom+miri verified"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/WyattAu/shm-rings"
 readme = "README.md"
