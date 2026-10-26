@@ -287,6 +287,13 @@ fetch_add — all L1-resident single-core.
 `shm-rings` is the deliberately small piece none of them is: a versioned,
 lock-free, cross-process SPMC ring with one page of semantics.
 
+## Stability
+
+`shm-rings` is 1.0. Breaking changes require a minor bump and a `#[deprecated]`
+window of at least one minor release; MSRV bumps are minor releases, never
+patch releases. `missing_docs` is denied and `unsafe` is forbidden. See the
+changelog for the short list of explicitly non-contractual behaviours.
+
 ## License
 
 MIT OR Apache-2.0

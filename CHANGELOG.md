@@ -1,9 +1,27 @@
 # Changelog
 
 All notable changes to this project are documented here. Format: [Keep a
-Changelog](https://keepachangelog.com/) — versions follow [semver](https://semver.org).
+Changelog](https://keepachangelog.com/): versions follow [semver](https://semver.org).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-26
+
+### Declared stable
+
+First 1.0. `shm-rings` carries cross-process production traffic; this release commits the SPMC ring layout, masking, alignment, and wait/notify surfaces as API-stable, with the loom and miri proofs as the regression gate.
+
+### Guarantees from here on
+
+- Breaking changes to public items require a minor bump plus a `#[deprecated]`
+  window of at least one minor release.
+- MSRV bumps are minor releases, not patch releases.
+- `#![deny(missing_docs)]` and `#![forbid(unsafe_code)]` are enforced.
+- Ring state written by any 1.x release is readable by every later 1.x release.
+
+### Explicitly not guaranteed
+
+- The on-wire ring layout is estate-internal; external readers must go through the documented API, not the bytes.
 
 ## [0.2.1] - 2026-09-12
 

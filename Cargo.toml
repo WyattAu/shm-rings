@@ -1,6 +1,6 @@
 [package]
 name = "shm-rings"
-version = "0.2.3"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Lock-free shared-memory SPMC ring: power-of-two masked, cache-line aligned, zero SeqCst, loom+miri verified"
